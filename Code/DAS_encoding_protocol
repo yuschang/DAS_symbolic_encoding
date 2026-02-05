@@ -1,1 +1,39 @@
+Goal: Convert traced whistle contours (anchor points) into uniformly sampled curves and encode each whistle as an DAS sequence (D=Descent, A=Ascent, S=Static). Output one DAS string per whistle (joining multiple disjoint contour sections with “_”).
+
+
+Input
+•	Traced anchor point data (2ⅹK): pixel coordinate of time axis and frequency axis.
+•	Spectrogram image resolution: 1) temporal resolution (second / pixel), 2) frequency resolution (Hz / pixel)
+Parameters
+•	Unified temporal resolution dx = 0.01 s
+•	threshold_freq = 35 Hz
+•	threshold_min_seg_length = 0.03 s
+Procdure
+1	Load whistle anchor points
+2	Per traced segment: 
+•	Convert each anchor (x,y) from pixels → physical units t(s) and f(Hz) using the spectrogram image resolution.
+•	Fit a cubic spline through (t, f) anchor points.
+•	Evaluate a dense curve along the spline; then uniformly resample in time:
+o	new_x = min(t) : dx : max(t)
+o	new_y = interp1(t, f, new_x, 'linear') (*interp1 is a MATLAB function)
+•	Segment & encode with func_getWPE(new_x, new_y, threshold_freq, threshold_min_seg_length) to get:
+o	WPE_pattern: sequence of ‘A’, ‘D’, ‘S’
+o	WPE_para: per-segment start/stop (time, freq), duration, Δf
+o	WPE_key_idx: start/stop indices into new_x/new_y
+	func_getWPE logic:
+-	Compute point-to-point frequency gaps.
+-	Label A if gap > thresh_freq, D if gap < −thresh_freq, S otherwise.
+-	Collapse runs into segment letters; compute segment bounds and parameters.
+-	Remove S segments shorter than threshold_min_seg_length, except when doing so would fuse identical neighbors (e.g., “A S A” → prevents “A A”).
+Store results for this whistle:
+•	Per-segment arrays (profile, xAxis, WPE_pattern, WPE_para, WPE_key_idx).
+3	Assemble one DAS string per whistle.
+3.1	Concatenate WPEpattern across all traced segments in time order.
+3.2	If a whistle has multiple disconnected contour sections, join section-level strings with an underscore “_”.
+Example: section1=ASDS, section2=SD → final = ASDS_SD.
+Outputs
+•	DAS string per whistle (e.g., ASDS_SD).
+•	Segment table per whistle (WPE_para): start/stop time (s), start/stop freq (kHz), duration (s), Δf (kHz).
+•	Key indices (WPE_key_idx) for reproducible plotting/highlighting.
+•	Uniformly sampled contour (xAxis, profile) at dx.
 
